@@ -595,29 +595,43 @@ function taxOn(c){ return c.thueTren === "sauphi" ? "sauphi" : "gop"; } // thu�
 function inputVnd(){ const raw = cur === "USD" ? parseUsd(F.soTien.value) : parseVnd(F.soTien.value); return cur === "USD" ? Math.round(raw * parseVnd(F.tyGia.value)) : raw; }
 // Doanh thu gộp → trừ phí sàn → "sau phí, trước thuế" → trừ thuế TNCN và GTGT → thực nhận.
 // Thuế tính trên doanh thu gộp (Shopee làm vậy) hoặc trên số sau phí, tùy cài đặt của nguồn.
+// Làm tròn giống bảng đối soát Shopee: phí = làm tròn (gộp × %phí);
+// TNCN và GTGT làm tròn RIÊNG từng loại (ví dụ 5% của 71.851 = 3.592,55 → 3.593 mỗi loại).
+// Khi suy ngược từ số sau phí hoặc tiền thực nhận, app thử vài số gộp quanh số ước tính,
+// giữ những số tính xuôi ra đúng con số bạn nhập, rồi chọn số gần ước tính nhất.
 function calc(){
   const c = srcCfg(selSrc), x = inputVnd(); const p = (c.phi || 0) / 100, r1 = (c.tncn || 0) / 100, r2 = (c.gtgt || 0) / 100, tr = r1 + r2, kt = isKT(c), onGross = taxOn(c) === "gop";
-  const feeFromBase = (base) => p < 1 ? Math.round(base / (1 - p)) - base : 0;
+  const feeOf = (g) => Math.round(g * p);
+  const tnOf = (b) => Math.round(b * r1), gtOf = (b) => Math.round(b * r2);
+  const taxOf = (b) => tnOf(b) + gtOf(b);
+  const findBest = (est, ok) => {
+    const c0 = Math.round(est); let best = null;
+    for (let d = -3; d <= 3; d++) { const v = c0 + d; if (v >= 0 && ok(v) && (best === null || Math.abs(v - est) < Math.abs(best - est))) best = v; }
+    return best === null ? c0 : best;
+  };
+  const grossFromBase = (base) => findBest(p < 1 ? base / (1 - p) : base, (g) => g - feeOf(g) === base);
   let g, phi, base;
   if (nhapMode === "thucnhan" && kt) {
     // Số nhập là tiền về sau khi sàn đã trừ phí và thuế: suy ngược ra doanh thu gộp
     const net = x;
     if (onGross) {
-      if (dirty.phi) { phi = parseVnd(F.phi.value); g = tr < 1 ? Math.round((net + phi) / (1 - tr)) : net + phi; }
-      else { g = (1 - p - tr) > 0 ? Math.round(net / (1 - p - tr)) : net; phi = Math.round(g * p); }
+      if (dirty.phi) { phi = parseVnd(F.phi.value); g = findBest(tr < 1 ? (net + phi) / (1 - tr) : net + phi, (v) => v - phi - taxOf(v) === net); }
+      else { g = findBest((1 - p - tr) > 0 ? net / (1 - p - tr) : net, (v) => v - feeOf(v) - taxOf(v) === net); phi = feeOf(g); }
       base = g - phi;
     } else {
-      base = tr < 1 ? Math.round(net / (1 - tr)) : net;
-      phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi;
+      base = findBest(tr < 1 ? net / (1 - tr) : net, (b) => b - taxOf(b) === net);
+      if (dirty.phi) { phi = parseVnd(F.phi.value); g = base + phi; } else { g = grossFromBase(base); phi = g - base; }
     }
-    const tn = Math.round((onGross ? g : base) * r1);
+    const tn = tnOf(onGross ? g : base);
     return { g, phi, base, tn, gt: base - net - tn, net, kt, onGross };
   }
-  if (nhapMode === "thucnhan" || nhapMode === "sauphi") { base = x; phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi; }
-  else { g = x; phi = dirty.phi ? parseVnd(F.phi.value) : Math.round(g * p); base = g - phi; }
+  if (nhapMode === "thucnhan" || nhapMode === "sauphi") {
+    base = x;
+    if (dirty.phi) { phi = parseVnd(F.phi.value); g = base + phi; } else { g = grossFromBase(base); phi = g - base; }
+  } else { g = x; phi = dirty.phi ? parseVnd(F.phi.value) : feeOf(g); base = g - phi; }
   const tb = onGross ? g : base;
-  const tn = dirty.tncn ? parseVnd(F.tncn.value) : Math.round(tb * r1);
-  const gt = dirty.gtgt ? parseVnd(F.gtgt.value) : Math.round(tb * r2);
+  const tn = dirty.tncn ? parseVnd(F.tncn.value) : tnOf(tb);
+  const gt = dirty.gtgt ? parseVnd(F.gtgt.value) : gtOf(tb);
   return { g, phi, base, tn, gt, net: kt ? base - tn - gt : base, kt, onGross };
 }
 function recalc(){
