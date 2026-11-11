@@ -827,9 +827,9 @@ function renderSummary(){
   h += '</tbody><tfoot><tr><td>Cả năm</td><td>' + num(S.g) + '</td><td>' + num(S.p) + '</td><td>' + num(S.b) + '</td><td>' + num(S.t1) + '</td><td>' + num(S.t2) + '</td><td>' + num(S.n) + '</td></tr></tfoot></table>';
   $("tblMonth").innerHTML = S.c ? h : '<p class="hint">Chưa có khoản nào trong năm ' + y + '.</p>';
   const srcs = [...new Set(rows.map(e=>e.nguon))];
-  let h2 = '<table><thead><tr><th>Nguồn</th><th>Kê khai</th><th>Số khoản</th><th>Doanh thu gộp</th><th>Sau phí</th><th>Thuế</th><th>Về TK</th></tr></thead><tbody>';
-  srcs.map(n => [n, sumOf(rows.filter(e=>e.nguon===n))]).sort((a,b)=>b[1].g-a[1].g).forEach(([n,s]) => { const kk = s.cKT && !s.cTu ? "Sàn thay" : (!s.cKT && s.cTu ? "Tự kê khai" : "Lẫn"); h2 += '<tr><td>' + esc(n) + '</td><td>' + kk + '</td><td>' + s.c + '</td><td>' + num(s.g) + '</td><td>' + num(s.b) + '</td><td>' + num(s.t1+s.t2) + '</td><td>' + num(s.n) + '</td></tr>'; });
-  h2 += '</tbody></table>';
+  let h2 = '<table><thead><tr><th>Nguồn</th><th>Kê khai</th><th>Số khoản</th><th>Doanh thu gộp</th><th>Sau phí</th><th>Thuế TNCN</th><th>Thuế GTGT</th><th>Về TK</th></tr></thead><tbody>';
+  srcs.map(n => [n, sumOf(rows.filter(e=>e.nguon===n))]).sort((a,b)=>b[1].g-a[1].g).forEach(([n,s]) => { const kk = s.cKT && !s.cTu ? "Sàn thay" : (!s.cKT && s.cTu ? "Tự kê khai" : "Lẫn"); h2 += '<tr><td>' + esc(n) + '</td><td>' + kk + '</td><td>' + s.c + '</td><td>' + num(s.g) + '</td><td>' + num(s.b) + '</td><td>' + num(s.t1) + '</td><td>' + num(s.t2) + '</td><td>' + num(s.n) + '</td></tr>'; });
+  h2 += '</tbody><tfoot><tr><td>Tổng</td><td></td><td>' + S.c + '</td><td>' + num(S.g) + '</td><td>' + num(S.b) + '</td><td>' + num(S.t1) + '</td><td>' + num(S.t2) + '</td><td>' + num(S.n) + '</td></tr></tfoot></table>';
   $("tblSrc").innerHTML = srcs.length ? h2 : '<p class="hint">Chưa có dữ liệu.</p>';
   $("lnkSheet").href = "https://docs.google.com/spreadsheets/d/" + encodeURIComponent(settings.sheetId||"") + "/edit";
 }

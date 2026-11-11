@@ -1,6 +1,6 @@
 // Sổ Doanh Thu: lưu sẵn giao diện app để mở được khi không có mạng.
 // Mỗi lần sửa app, tăng số phiên bản bên dưới để điện thoại tải bản mới.
-const VERSION = "sdt-v7";
+const VERSION = "sdt-v8";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
