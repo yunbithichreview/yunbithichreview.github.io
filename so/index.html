@@ -432,12 +432,12 @@ function moneyInput(el){ el.addEventListener("input", () => { if (el.dataset.usd
 
 const DEFAULT_SETTINGS = {
   nguon: [
-    { ten: "Shopee Affiliate", tncn: 5, gtgt: 5, phi: 0.98, nhap: "sauphi", khauTru: true },
-    { ten: "TikTok Shop Affiliate", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false },
-    { ten: "Facebook", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false },
-    { ten: "YouTube", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false },
-    { ten: "Gumroad", tncn: 5, gtgt: 5, phi: 10, nhap: "thucnhan", khauTru: false },
-    { ten: "Khác", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false }
+    { ten: "Shopee Affiliate", tncn: 5, gtgt: 5, phi: 0.98, nhap: "sauphi", khauTru: true, thueTren: "gop" },
+    { ten: "TikTok Shop Affiliate", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false, thueTren: "gop" },
+    { ten: "Facebook", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false, thueTren: "gop" },
+    { ten: "YouTube", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false, thueTren: "gop" },
+    { ten: "Gumroad", tncn: 5, gtgt: 5, phi: 10, nhap: "thucnhan", khauTru: false, thueTren: "gop" },
+    { ten: "Khác", tncn: 5, gtgt: 5, phi: 0, nhap: "gop", khauTru: false, thueTren: "gop" }
   ],
   nguong: 1000000000,
   sheetId: "1eQQ3UO97p2exG8BTGLFkzU9yr7nRAfJOSOSlJ7huHQk",
@@ -545,7 +545,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // ---------- Form ghi khoản thu ----------
 let cur = "VND", editingId = null, dirty = { tncn:false, gtgt:false, phi:false }, selSrc = "", nhapMode = "gop";
 const MODE_HINT = {
-  gop: "Số sàn ghi nhận trước khi trừ gì. App trừ phí sàn trước, rồi tính thuế trên phần còn lại.",
+  gop: "Số sàn ghi nhận trước khi trừ gì. App tự tính phí sàn và thuế theo % của nguồn.",
   sauphi: "Số sàn hiện sau khi trừ phí, chưa trừ thuế (Shopee hiện số này). App suy ngược ra doanh thu gộp.",
   thucnhan: "Số tiền cuối cùng về tài khoản. App suy ngược ra phí, thuế và doanh thu gộp."
 };
@@ -589,28 +589,40 @@ document.querySelectorAll(".quick .chip").forEach(b => b.onclick = (ev) => {
 [F.ma, F.ghiChu, F.loai].forEach(el => el.addEventListener("input", updateMoreSum));
 function updateMoreSum(){ const parts = []; if (F.loai.value !== "Hoa hồng affiliate") parts.push(F.loai.value); if (F.ma.value.trim()) parts.push("mã " + F.ma.value.trim()); if (F.ghiChu.value.trim()) parts.push(F.ghiChu.value.trim().slice(0, 30)); $("moreSum").textContent = parts.length ? parts.join(" · ") : "loại thu, mã đối chiếu, ghi chú"; }
 
-function srcCfg(name){ return (settings.nguon || []).find(s => s.ten === name) || { ten:name, tncn:5, gtgt:5, phi:0, nhap:"gop", khauTru:false }; }
+function srcCfg(name){ return (settings.nguon || []).find(s => s.ten === name) || { ten:name, tncn:5, gtgt:5, phi:0, nhap:"gop", khauTru:false, thueTren:"gop" }; }
 function isKT(c){ return c.khauTru === true; }
+function taxOn(c){ return c.thueTren === "sauphi" ? "sauphi" : "gop"; } // thuế tính trên doanh thu gộp (mặc định) hay trên số sau phí
 function inputVnd(){ const raw = cur === "USD" ? parseUsd(F.soTien.value) : parseVnd(F.soTien.value); return cur === "USD" ? Math.round(raw * parseVnd(F.tyGia.value)) : raw; }
-// Thứ tự tính: doanh thu gộp → trừ phí sàn → "sau phí, trước thuế" → trừ thuế TNCN và GTGT (tính trên số sau phí) → thực nhận
+// Doanh thu gộp → trừ phí sàn → "sau phí, trước thuế" → trừ thuế TNCN và GTGT → thực nhận.
+// Thuế tính trên doanh thu gộp (Shopee làm vậy) hoặc trên số sau phí, tùy cài đặt của nguồn.
 function calc(){
-  const c = srcCfg(selSrc), x = inputVnd(); const p = c.phi || 0, t1 = c.tncn || 0, t2 = c.gtgt || 0, kt = isKT(c);
-  const feeFromBase = (base) => p < 100 ? Math.round(base / (1 - p / 100)) - base : 0;
-  let g, phi, base, tn, gt, net;
-  if (nhapMode === "sauphi") { base = x; phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi; }
-  else if (nhapMode === "thucnhan") {
-    net = x; const tr = (t1 + t2) / 100; base = kt && tr < 1 ? Math.round(net / (1 - tr)) : net;
-    phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi;
-    tn = Math.round(base * t1 / 100); gt = kt ? base - net - tn : Math.round(base * t2 / 100); return { g, phi, base, tn, gt, net, kt };
+  const c = srcCfg(selSrc), x = inputVnd(); const p = (c.phi || 0) / 100, r1 = (c.tncn || 0) / 100, r2 = (c.gtgt || 0) / 100, tr = r1 + r2, kt = isKT(c), onGross = taxOn(c) === "gop";
+  const feeFromBase = (base) => p < 1 ? Math.round(base / (1 - p)) - base : 0;
+  let g, phi, base;
+  if (nhapMode === "thucnhan" && kt) {
+    // Số nhập là tiền về sau khi sàn đã trừ phí và thuế: suy ngược ra doanh thu gộp
+    const net = x;
+    if (onGross) {
+      if (dirty.phi) { phi = parseVnd(F.phi.value); g = tr < 1 ? Math.round((net + phi) / (1 - tr)) : net + phi; }
+      else { g = (1 - p - tr) > 0 ? Math.round(net / (1 - p - tr)) : net; phi = Math.round(g * p); }
+      base = g - phi;
+    } else {
+      base = tr < 1 ? Math.round(net / (1 - tr)) : net;
+      phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi;
+    }
+    const tn = Math.round((onGross ? g : base) * r1);
+    return { g, phi, base, tn, gt: base - net - tn, net, kt, onGross };
   }
-  else { g = x; phi = dirty.phi ? parseVnd(F.phi.value) : Math.round(g * p / 100); base = g - phi; }
-  tn = dirty.tncn ? parseVnd(F.tncn.value) : Math.round(base * t1 / 100);
-  gt = dirty.gtgt ? parseVnd(F.gtgt.value) : Math.round(base * t2 / 100);
-  return { g, phi, base, tn, gt, net: kt ? base - tn - gt : base, kt };
+  if (nhapMode === "thucnhan" || nhapMode === "sauphi") { base = x; phi = dirty.phi ? parseVnd(F.phi.value) : feeFromBase(base); g = base + phi; }
+  else { g = x; phi = dirty.phi ? parseVnd(F.phi.value) : Math.round(g * p); base = g - phi; }
+  const tb = onGross ? g : base;
+  const tn = dirty.tncn ? parseVnd(F.tncn.value) : Math.round(tb * r1);
+  const gt = dirty.gtgt ? parseVnd(F.gtgt.value) : Math.round(tb * r2);
+  return { g, phi, base, tn, gt, net: kt ? base - tn - gt : base, kt, onGross };
 }
 function recalc(){
   const c = srcCfg(selSrc); const r = calc(); const x = inputVnd();
-  const tag = r.kt ? "% sàn đã trừ" : "% bạn tự nộp";
+  const tag = "% " + (r.onGross ? "trên gộp" : "trên sau phí") + (r.kt ? ", sàn đã trừ" : ", bạn tự nộp");
   $("pctTNCN").textContent = c.tncn ? "(" + c.tncn + tag + ")" : ""; $("pctGTGT").textContent = c.gtgt ? "(" + c.gtgt + tag + ")" : ""; $("pctPhi").textContent = c.phi ? "(" + c.phi + "%)" : "";
   $("ktNote").textContent = r.kt ? "Sàn này đã khấu trừ thuế và kê khai thay bạn. Thuế bị trừ thẳng vào tiền về." : "Sàn này KHÔNG kê khai thay. Tiền về chưa trừ thuế, app chỉ ước tính số thuế bạn phải tự kê khai và nộp.";
   $("ktNote").className = "note " + (r.kt ? "ok" : "");
@@ -628,6 +640,7 @@ function recalc(){
     '<div><span class="k">Doanh thu gộp</span><b>' + num(r.g) + '</b></div>' +
     '<div><span class="k">− Phí sàn</span><span>' + num(r.phi) + '</span></div>' +
     '<div class="mid"><span>Sau phí, trước thuế</span><span>' + num(r.base) + '</span></div>' +
+    '<div><span class="k">Thuế tính trên</span><span>' + (r.onGross ? "doanh thu gộp " + num(r.g) : "số sau phí " + num(r.base)) + '</span></div>' +
     (r.kt
       ? '<div><span class="k">− Thuế TNCN (sàn đã trừ)</span><span>' + num(r.tn) + '</span></div>' +
         '<div><span class="k">− Thuế GTGT (sàn đã trừ)</span><span>' + num(r.gt) + '</span></div>'
@@ -788,6 +801,7 @@ function makeSrcCard(s){
       '</div>' +
       '<div class="opts">' +
         '<label class="sel"><span>Số bạn thường nhập</span><select class="f-nhap"><option value="gop"' + (nh==="gop"?" selected":"") + '>Doanh thu gộp</option><option value="sauphi"' + (nh==="sauphi"?" selected":"") + '>Sau phí, trước thuế</option><option value="thucnhan"' + (nh==="thucnhan"?" selected":"") + '>Tiền thực nhận</option></select></label>' +
+        '<label class="sel"><span>Thuế tính trên</span><select class="f-thue"><option value="gop"' + (s.thueTren !== "sauphi" ? " selected" : "") + '>Doanh thu gộp</option><option value="sauphi"' + (s.thueTren === "sauphi" ? " selected" : "") + '>Số sau phí</option></select></label>' +
         '<label class="toggle"><input type="checkbox" class="f-kt"' + (s.khauTru ? " checked" : "") + '> Sàn khấu trừ và kê khai thay</label>' +
       '</div>';
     r.querySelector(".x").onclick = () => { r.remove(); };
@@ -801,7 +815,7 @@ $("btnAddSrc").onclick = () => {
 function readSrcCards(){
   return [...$("srcList").querySelectorAll(".src-card")].map(r => ({
     ten: r.querySelector(".f-ten").value.trim(), phi: Number(r.querySelector(".f-phi").value)||0, tncn: Number(r.querySelector(".f-tncn").value)||0, gtgt: Number(r.querySelector(".f-gtgt").value)||0,
-    nhap: r.querySelector(".f-nhap").value, khauTru: r.querySelector(".f-kt").checked }));
+    nhap: r.querySelector(".f-nhap").value, thueTren: r.querySelector(".f-thue").value, khauTru: r.querySelector(".f-kt").checked }));
 }
 $("btnSaveSrc").onclick = () => {
   const rows = readSrcCards().filter(s => s.ten);
