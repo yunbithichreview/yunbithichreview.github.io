@@ -70,6 +70,8 @@ textarea{min-height:72px;resize:vertical}
 .seg{display:inline-flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden}
 .seg button{font:inherit;font-weight:600;padding:10px 16px;border:0;background:var(--chip);color:var(--fg);cursor:pointer;min-height:44px}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.seg.tk-basis{display:flex;width:100%;margin-bottom:10px}
+.seg.tk-basis button{flex:1 1 0;min-width:0;font-size:.88rem;padding:10px 8px;line-height:1.25}
 .btn{font:inherit;font-weight:600;font-size:1rem;border:0;border-radius:12px;padding:14px 18px;cursor:pointer;min-height:50px;background:var(--chip);color:var(--fg);text-decoration:none;display:inline-flex;align-items:center;justify-content:center;text-align:center}
 .btn.primary{background:var(--accent);color:var(--accent-fg);width:100%;font-size:1.1rem;min-height:56px}
 .btn.ghost{background:transparent;border:1.5px solid var(--line)}
@@ -269,11 +271,11 @@ code{font-size:.85em;background:var(--chip);padding:1px 5px;border-radius:5px;ov
       <div class="lbl" style="margin-top:16px">3. Ngày</div>
       <div class="row">
         <div class="field"><label class="lbl" for="fNgaySan">Ngày sàn ghi nhận</label>
-          <div class="date-wrap"><input type="text" id="fNgaySan" class="date-vn" inputmode="numeric" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày sàn ghi nhận trên lịch"></div>
+          <div class="date-wrap"><input type="text" id="fNgaySan" class="date-vn" inputmode="decimal" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày sàn ghi nhận trên lịch"></div>
           <span class="quick"><button type="button" class="chip sm" data-q="san:0">Hôm nay</button><button type="button" class="chip sm" data-q="san:1">Hôm qua</button></span>
         </div>
         <div class="field"><label class="lbl" for="fNgayNhan">Ngày tiền về tài khoản</label>
-          <div class="date-wrap"><input type="text" id="fNgayNhan" class="date-vn" inputmode="numeric" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày tiền về trên lịch"></div>
+          <div class="date-wrap"><input type="text" id="fNgayNhan" class="date-vn" inputmode="decimal" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày tiền về trên lịch"></div>
           <span class="quick"><button type="button" class="chip sm" data-q="nhan:0">Hôm nay</button><button type="button" class="chip sm" data-q="nhan:clear">Chưa về</button></span>
         </div>
       </div>
@@ -322,6 +324,10 @@ code{font-size:.85em;background:var(--chip);padding:1px 5px;border-radius:5px;ov
 
   <!-- ===== TỔNG KẾT ===== -->
   <section class="view" id="view-tong-ket" hidden>
+    <div class="seg tk-basis" role="group" aria-label="Tính tổng theo ngày nào">
+      <button type="button" id="tkSan" aria-pressed="true">Theo ngày sàn ghi nhận</button>
+      <button type="button" id="tkNhan" aria-pressed="false">Theo ngày tiền về</button>
+    </div>
     <div class="filters">
       <select id="tkYear" aria-label="Năm tổng kết"></select>
     </div>
@@ -561,10 +567,22 @@ function toIso(s){
 }
 function dateField(id){
   const t = $(id), nat = t.parentElement.querySelector(".date-native");
-  t.addEventListener("input", () => {
-    const d = t.value.replace(/\D/g, "").slice(0, 8);
-    let o = d.slice(0, 2); if (d.length > 2) o += "/" + d.slice(2, 4); if (d.length > 4) o += "/" + d.slice(4);
-    t.value = o; t.classList.toggle("bad", d.length === 8 && !toIso(o));
+  // Gõ tự do: ngày/tháng có hay không có số 0 đều được (5/1/2026 hay 05/01/2026).
+  // Dấu chấm, phẩy, gạch ngang tự đổi thành "/". Chỉ tự thêm "/" khi đang gõ ở cuối ô,
+  // nên bấm vào giữa để sửa riêng một số ngày hoặc tháng vẫn được.
+  t.addEventListener("input", (ev) => {
+    const raw = t.value, caret = t.selectionStart == null ? raw.length : t.selectionStart;
+    const atEnd = caret === raw.length, adding = !ev.inputType || ev.inputType.indexOf("insert") === 0;
+    let v = raw.replace(/[.,\-\s]/g, "/").replace(/[^\d/]/g, "").replace(/\/{2,}/g, "/").replace(/^\//, "");
+    if (atEnd && adding) {
+      if (/^\d{8}$/.test(v)) v = v.slice(0, 2) + "/" + v.slice(2, 4) + "/" + v.slice(4);
+      else if (/^\d{2}$/.test(v) || /^\d{1,2}\/\d{2}$/.test(v)) v += "/";
+    }
+    if (v !== raw) {
+      const pos = atEnd ? v.length : Math.max(0, caret - (raw.length - v.length));
+      t.value = v; try { t.setSelectionRange(pos, pos); } catch(e) {}
+    }
+    t.classList.toggle("bad", /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v) && !toIso(v));
   });
   t.addEventListener("blur", () => { t.classList.toggle("bad", !!t.value && !toIso(t.value)); });
   nat.addEventListener("click", () => { nat.value = toIso(t.value) || today(); try { nat.showPicker(); } catch(e) {} });
@@ -734,8 +752,8 @@ function renderStrip(){
 }
 
 // ---------- Sổ (danh sách) ----------
-function years(){ const ys = new Set(entries.map(e => e.nam)); ys.add(new Date().getFullYear()); return [...ys].filter(Boolean).sort((a,b)=>b-a); }
-function fillYears(sel){ const v = sel.value; sel.innerHTML = ""; years().forEach(y => { const o = document.createElement("option"); o.value = y; o.textContent = "Năm " + y; sel.appendChild(o); }); if (v && [...sel.options].some(o => o.value === v)) sel.value = v; }
+function years(list){ const ys = new Set(list || entries.map(e => e.nam)); ys.add(new Date().getFullYear()); return [...ys].filter(Boolean).sort((a,b)=>b-a); }
+function fillYears(sel, list){ const v = sel.value; sel.innerHTML = ""; years(list).forEach(y => { const o = document.createElement("option"); o.value = y; o.textContent = "Năm " + y; sel.appendChild(o); }); if (v && [...sel.options].some(o => o.value === v)) sel.value = v; }
 (function(){ const m = $("flMonth"); for (let i=1;i<=12;i++){ const o = document.createElement("option"); o.value = i; o.textContent = monthName(i); m.appendChild(o);} })();
 function fillSrcFilter(){ const s = $("flSrc"); const v = s.value; s.innerHTML = '<option value="">Mọi nguồn</option>'; const names = new Set([...(settings.nguon||[]).map(x=>x.ten), ...entries.map(e=>e.nguon)]); names.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; s.appendChild(o); }); s.value = v; }
 ["flYear","flMonth","flSrc"].forEach(id => $(id).addEventListener("change", renderList));
@@ -770,10 +788,32 @@ function sumOf(list){ return list.reduce((a,e) => { const kt = eKT(e); const t =
   a.g += e.doanhThu||0; a.t1 += e.thueTNCN||0; a.t2 += e.thueGTGT||0; a.p += e.phiSan||0; a.b += b; a.n += e.thucNhan||0; a.c++;
   if (kt) { a.gKT += e.doanhThu||0; a.tKT += t; a.cKT++; } else { a.gTu += e.doanhThu||0; a.tTu += t; a.cTu++; }
   return a; }, {g:0,t1:0,t2:0,p:0,b:0,n:0,c:0,gKT:0,tKT:0,cKT:0,gTu:0,tTu:0,cTu:0}); }
+// Tổng kết theo ngày sàn ghi nhận (mặc định) hoặc theo ngày tiền về tài khoản.
+// Theo ngày tiền về: khoản chưa có ngày tiền về được tách riêng, không cộng vào tổng.
+let tkBasis = lsGet("sdt.tkBasis", "san") === "nhan" ? "nhan" : "san";
+function ymOf(e){
+  if (tkBasis === "nhan") { if (!e.ngayNhan) return null; return { nam: Number(e.ngayNhan.slice(0,4)), thang: Number(e.ngayNhan.slice(5,7)) }; }
+  return { nam: e.nam, thang: e.thang };
+}
+function tkYears(){ return entries.map(ymOf).filter(Boolean).map(k => k.nam); }
+function setBasis(b){
+  tkBasis = b; lsSet("sdt.tkBasis", b);
+  $("tkSan").setAttribute("aria-pressed", b === "san"); $("tkNhan").setAttribute("aria-pressed", b === "nhan");
+  fillYears($("tkYear"), tkYears()); renderSummary();
+}
+$("tkSan").onclick = () => setBasis("san"); $("tkNhan").onclick = () => setBasis("nhan");
 function renderSummary(){
-  const y = Number($("tkYear").value); const rows = entries.filter(e => e.nam === y); const S = sumOf(rows);
+  $("tkSan").setAttribute("aria-pressed", tkBasis === "san"); $("tkNhan").setAttribute("aria-pressed", tkBasis === "nhan");
+  const y = Number($("tkYear").value);
+  const keyed = entries.map(e => ({ e, k: ymOf(e) }));
+  const inYear = keyed.filter(x => x.k && x.k.nam === y);
+  const rows = inYear.map(x => x.e); const S = sumOf(rows);
+  const monthOf = new Map(inYear.map(x => [x.e, x.k.thang]));
+  const pend = tkBasis === "nhan" ? entries.filter(e => !e.ngayNhan) : []; const P = sumOf(pend);
+  const basisTxt = tkBasis === "nhan" ? "theo ngày tiền về" : "theo ngày sàn ghi nhận";
   $("tiles").innerHTML =
-    '<div class="tile big"><div class="k">Tổng doanh thu gộp năm ' + y + '</div><div class="v">' + VND(S.g) + '</div><div class="s">' + S.c + ' khoản · ' + (docTien(S.g) || "chưa có") + '</div></div>' +
+    '<div class="tile big"><div class="k">Tổng doanh thu gộp năm ' + y + ' · ' + basisTxt + '</div><div class="v">' + VND(S.g) + '</div><div class="s">' + S.c + ' khoản · ' + (docTien(S.g) || "chưa có") + '</div></div>' +
+    (tkBasis === "nhan" ? '<div class="tile grp tax"><div class="k">Chưa về tài khoản (không tính vào tổng trên)</div><div class="v">' + num(P.g) + '</div><div class="s">' + (P.c ? P.c + ' khoản chưa có ngày tiền về · dự kiến về <b>' + num(P.n) + '</b>' : 'Mọi khoản đều đã về tài khoản') + '</div></div>' : '') +
     '<div class="tile grp ok"><div class="k">Sàn đã khấu trừ và kê khai thay</div><div class="v">' + num(S.gKT) + '</div><div class="s">' + S.cKT + ' khoản · thuế sàn đã nộp <b>' + num(S.tKT) + '</b></div></div>' +
     '<div class="tile grp tax"><div class="k">Bạn phải tự kê khai</div><div class="v">' + num(S.gTu) + '</div><div class="s">' + S.cTu + ' khoản · thuế ước tính phải nộp <b>' + num(S.tTu) + '</b></div></div>' +
     '<div class="tile"><div class="k">Phí sàn</div><div class="v">' + num(S.p) + '</div></div>' +
@@ -783,7 +823,7 @@ function renderSummary(){
   const ng = settings.nguong || 0; const pct = ng ? Math.min(100, S.g / ng * 100) : 0;
   $("nguongCard").innerHTML = '<h3>So với ngưỡng phải nộp thuế</h3><div class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></div><p class="hint">' + num(S.g) + ' / ' + num(ng) + ' đ (' + pct.toFixed(1) + '%). ' + (S.g >= ng ? 'Đã vượt ngưỡng: năm nay thuộc diện phải khai và nộp thuế.' : 'Còn ' + num(ng - S.g) + ' đ nữa mới tới ngưỡng.') + '</p>';
   let h = '<table><thead><tr><th>Tháng</th><th>Doanh thu gộp</th><th>Phí sàn</th><th>Sau phí</th><th>Thuế TNCN</th><th>Thuế GTGT</th><th>Về TK</th></tr></thead><tbody>';
-  for (let m=1;m<=12;m++){ const s = sumOf(rows.filter(e=>e.thang===m)); if (!s.c) continue; h += '<tr><td>' + monthName(m) + '</td><td>' + num(s.g) + '</td><td>' + num(s.p) + '</td><td>' + num(s.b) + '</td><td>' + num(s.t1) + '</td><td>' + num(s.t2) + '</td><td>' + num(s.n) + '</td></tr>'; }
+  for (let m=1;m<=12;m++){ const s = sumOf(rows.filter(e=>monthOf.get(e)===m)); if (!s.c) continue; h += '<tr><td>' + monthName(m) + '</td><td>' + num(s.g) + '</td><td>' + num(s.p) + '</td><td>' + num(s.b) + '</td><td>' + num(s.t1) + '</td><td>' + num(s.t2) + '</td><td>' + num(s.n) + '</td></tr>'; }
   h += '</tbody><tfoot><tr><td>Cả năm</td><td>' + num(S.g) + '</td><td>' + num(S.p) + '</td><td>' + num(S.b) + '</td><td>' + num(S.t1) + '</td><td>' + num(S.t2) + '</td><td>' + num(S.n) + '</td></tr></tfoot></table>';
   $("tblMonth").innerHTML = S.c ? h : '<p class="hint">Chưa có khoản nào trong năm ' + y + '.</p>';
   const srcs = [...new Set(rows.map(e=>e.nguon))];
@@ -870,7 +910,7 @@ window.addEventListener("hashchange", route);
 
 // fromServer: dữ liệu mới từ Sheet; không vẽ lại trang Cài đặt khi bạn đang sửa ở đó
 function renderAll(fromServer){
-  fillYears($("flYear")); fillYears($("tkYear")); fillSrcFilter(); renderStrip(); renderList(); renderSummary();
+  fillYears($("flYear")); fillYears($("tkYear"), tkYears()); fillSrcFilter(); renderStrip(); renderList(); renderSummary();
   if (!editingId && !(settings.nguon||[]).some(s => s.ten === selSrc)) { selSrc = settings.nguon && settings.nguon[0] ? settings.nguon[0].ten : ""; setMode(srcCfg(selSrc).nhap || "gop"); }
   renderSrcChips(); recalc();
   if (fromServer && curView === "cai-dat" && !$("view-cai-dat").contains(document.activeElement)) renderSettings();
