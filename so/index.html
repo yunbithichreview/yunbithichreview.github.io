@@ -89,6 +89,14 @@ textarea{min-height:72px;resize:vertical}
 .words{min-height:1.3em;font-size:.95rem;color:var(--accent);font-weight:600;margin-top:6px;text-align:right}
 .words.warn{color:var(--tax)}
 .quick{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+div.field{margin-bottom:12px}
+.date-wrap{position:relative;display:flex;gap:6px}
+.date-wrap .date-vn{flex:1 1 auto;min-width:0;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.date-vn.bad{border-color:var(--danger);background:var(--danger-soft)}
+.date-wrap .cal{flex:0 0 48px;height:48px;border:1.5px solid var(--line);border-radius:10px;background:var(--chip);color:var(--fg);display:flex;align-items:center;justify-content:center}
+.date-wrap .cal svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.date-wrap input.date-native{position:absolute;right:0;top:0;width:48px;height:48px;min-height:0;opacity:0;padding:0;margin:0;border:0;cursor:pointer;color:transparent;background:transparent}
+.date-wrap input.date-native:focus-visible + *, .date-wrap:focus-within .cal{border-color:var(--accent)}
 
 /* Khối gập */
 details.fold{border:1.5px solid var(--line);border-radius:12px;margin-top:12px;background:var(--bg)}
@@ -260,12 +268,14 @@ code{font-size:.85em;background:var(--chip);padding:1px 5px;border-radius:5px;ov
 
       <div class="lbl" style="margin-top:16px">3. Ngày</div>
       <div class="row">
-        <label class="field"><span>Ngày sàn ghi nhận</span><input type="date" id="fNgaySan">
+        <div class="field"><label class="lbl" for="fNgaySan">Ngày sàn ghi nhận</label>
+          <div class="date-wrap"><input type="text" id="fNgaySan" class="date-vn" inputmode="numeric" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày sàn ghi nhận trên lịch"></div>
           <span class="quick"><button type="button" class="chip sm" data-q="san:0">Hôm nay</button><button type="button" class="chip sm" data-q="san:1">Hôm qua</button></span>
-        </label>
-        <label class="field"><span>Ngày tiền về tài khoản</span><input type="date" id="fNgayNhan">
+        </div>
+        <div class="field"><label class="lbl" for="fNgayNhan">Ngày tiền về tài khoản</label>
+          <div class="date-wrap"><input type="text" id="fNgayNhan" class="date-vn" inputmode="numeric" placeholder="ngày/tháng/năm" maxlength="10" autocomplete="off"><span class="cal" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><input type="date" class="date-native" aria-label="Chọn ngày tiền về trên lịch"></div>
           <span class="quick"><button type="button" class="chip sm" data-q="nhan:0">Hôm nay</button><button type="button" class="chip sm" data-q="nhan:clear">Chưa về</button></span>
-        </label>
+        </div>
       </div>
 
       <details class="fold" id="foldMore">
@@ -541,7 +551,32 @@ const MODE_HINT = {
 };
 function setMode(m){ nhapMode = m; document.querySelectorAll("#modeChips .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m)); $("modeHint").textContent = MODE_HINT[m] || ""; }
 document.querySelectorAll("#modeChips .chip").forEach(b => b.onclick = () => { setMode(b.dataset.mode); dirty = {tncn:false,gtgt:false,phi:false}; recalc(); });
-const F = { loai:$("fLoai"), ngaySan:$("fNgaySan"), ngayNhan:$("fNgayNhan"), soTien:$("fSoTien"), tyGia:$("fTyGia"), tncn:$("fTNCN"), gtgt:$("fGTGT"), phi:$("fPhi"), ma:$("fMa"), ghiChu:$("fGhiChu") };
+// Ô ngày luôn hiện ngày/tháng/năm (ô ngày có sẵn của trình duyệt đổi theo ngôn ngữ máy nên có khi thành tháng/ngày/năm).
+// Bên trong vẫn giữ dạng năm-tháng-ngày để tính toán và gửi lên Sheet.
+function toIso(s){
+  const m = String(s || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if (!m) return "";
+  const d = +m[1], mo = +m[2], y = +m[3]; const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return "";
+  return y + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+function dateField(id){
+  const t = $(id), nat = t.parentElement.querySelector(".date-native");
+  t.addEventListener("input", () => {
+    const d = t.value.replace(/\D/g, "").slice(0, 8);
+    let o = d.slice(0, 2); if (d.length > 2) o += "/" + d.slice(2, 4); if (d.length > 4) o += "/" + d.slice(4);
+    t.value = o; t.classList.toggle("bad", d.length === 8 && !toIso(o));
+  });
+  t.addEventListener("blur", () => { t.classList.toggle("bad", !!t.value && !toIso(t.value)); });
+  nat.addEventListener("click", () => { nat.value = toIso(t.value) || today(); try { nat.showPicker(); } catch(e) {} });
+  nat.addEventListener("change", () => { if (nat.value) { t.value = fmtDate(nat.value); t.classList.remove("bad"); } });
+  return {
+    el: t,
+    get value(){ return toIso(t.value); },
+    set value(v){ t.value = v ? fmtDate(v) : ""; t.classList.remove("bad"); },
+    get invalid(){ return !!t.value.trim() && !toIso(t.value); }
+  };
+}
+const F = { loai:$("fLoai"), ngaySan:dateField("fNgaySan"), ngayNhan:dateField("fNgayNhan"), soTien:$("fSoTien"), tyGia:$("fTyGia"), tncn:$("fTNCN"), gtgt:$("fGTGT"), phi:$("fPhi"), ma:$("fMa"), ghiChu:$("fGhiChu") };
 [F.tyGia, F.tncn, F.gtgt, F.phi].forEach(moneyInput);
 F.soTien.addEventListener("input", () => { if (cur === "VND") { const v = parseVnd(F.soTien.value); F.soTien.value = v ? num(v) : ""; } recalc(); });
 F.tyGia.addEventListener("input", recalc);
@@ -642,7 +677,9 @@ $("btnSave").onclick = () => {
   const r = calc();
   if (!selSrc) return toast("Chọn nguồn thu trước nha", true);
   if (!inputVnd()) { toast("Nhập số tiền trước nha", true); F.soTien.focus(); return; }
-  if (!F.ngaySan.value) return toast("Nhập ngày sàn ghi nhận", true);
+  if (F.ngaySan.invalid) { toast("Ngày sàn ghi nhận chưa đúng. Gõ dạng ngày/tháng/năm, ví dụ 25/11/2026", true); F.ngaySan.el.focus(); return; }
+  if (!F.ngaySan.value) { toast("Nhập ngày sàn ghi nhận", true); F.ngaySan.el.focus(); return; }
+  if (F.ngayNhan.invalid) { toast("Ngày tiền về chưa đúng. Gõ dạng ngày/tháng/năm, hoặc để trống nếu chưa về", true); F.ngayNhan.el.focus(); return; }
   const e = {
     id: editingId || genId(), nguon: selSrc, loai: F.loai.value, ngaySan: F.ngaySan.value, ngayNhan: F.ngayNhan.value || "",
     nam: Number(F.ngaySan.value.slice(0,4)), thang: Number(F.ngaySan.value.slice(5,7)),
